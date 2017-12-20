@@ -22,7 +22,10 @@ import com.mikepenz.iconics.IconicsDrawable;
 import com.mikepenz.iconics.context.IconicsLayoutInflater2;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 
@@ -31,6 +34,7 @@ import de.fhro.inf.prg3.a11.openmensa.OpenMensaAPIService;
 import de.fhro.inf.prg3.a11.adapter.MealsRecyclerAdapter;
 import de.fhro.inf.prg3.a11.openmensa.model.Canteen;
 import de.fhro.inf.prg3.a11.openmensa.model.Meal;
+import de.fhro.inf.prg3.a11.openmensa.model.PageInfo;
 
 public class MainActivity extends AppCompatActivity implements DatePickerDialog.OnDateSetListener, AdapterView.OnItemSelectedListener {
 
@@ -45,6 +49,8 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
     private RecyclerView mealsListView;
     private ArrayAdapter<Canteen> canteenAdapter;
     private MealsRecyclerAdapter mealsListAdapter;
+
+    private int canteenId = 354;
 
     public MainActivity() {
         dateFormat = new SimpleDateFormat(OPEN_MENSA_DATE_FORMAT, Locale.getDefault());
@@ -130,6 +136,9 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
     @Override
     public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
         /* TODO Trigger updating of displayed meals as another canteen is now selected */
+        Toast.makeText(this, "onItemselected: " + position, Toast.LENGTH_LONG).show();
+        canteenId = position;
+        updateMeals();
     }
 
     @Override
@@ -141,7 +150,7 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         ).show();
     }
 
-    private void initCanteensSpinner() {
+    private void initCanteensSpinner(){
         /* TODO load all canteens and pass them to the canteenAdapter instance
          * hint: the first page is loaded without an index
          * afterwards you have to load the remaining pages with an index
@@ -149,6 +158,20 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
          * you can create a PageInfo object by passing the return value `Response<T>`
          * you get when you fetch the first page to the static method `extractFromResponse(...)`
          * of the PageInfo class */
+
+        List<Canteen> list = new LinkedList<>();
+        try{
+            PageInfo pageInfo = PageInfo.extractFromResponse(openMensaAPI.getCanteens().get());
+            list.addAll(openMensaAPI.getCanteens().get().body());
+            for(int i = 2; i <= pageInfo.getTotalCountOfPages(); i++){
+                list.addAll(openMensaAPI.getCanteens(i).get());
+            }
+            list.sort((canteen, t1) -> canteen.toString().compareToIgnoreCase(t1.toString()));
+            canteenAdapter.addAll(list);
+            Toast.makeText(this, "Finished init", Toast.LENGTH_LONG).show();
+        } catch (Exception e){
+            Toast.makeText(this, "init failed", Toast.LENGTH_LONG).show();
+        }
     }
 
     /**
@@ -163,5 +186,13 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         final String dateString = dateFormat.format(currentDate.getTime());
 
         /* TODO load meals and pass them to the helper method `updateMealsListView(...)` to update the view */
+
+        try{
+            mealsListAdapter.clear();
+            if(!openMensaAPI.getMensaState(canteenId, dateFormat.format(currentDate.getTime())).get().isClosed())
+                mealsListAdapter.addAll(openMensaAPI.getMeals(canteenId, dateString).get());
+            else
+                mealsListAdapter.addAll(new ArrayList<Meal>());
+        }catch (Exception e){}
     }
 }
