@@ -28,6 +28,8 @@ import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
 
 import de.fhro.inf.prg3.a11.openmensa.OpenMensaAPI;
 import de.fhro.inf.prg3.a11.openmensa.OpenMensaAPIService;
@@ -161,13 +163,17 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
         List<Canteen> list = new LinkedList<>();
         try{
-            PageInfo pageInfo = PageInfo.extractFromResponse(openMensaAPI.getCanteens().get());
-            list.addAll(openMensaAPI.getCanteens().get().body());
-            for(int i = 2; i <= pageInfo.getTotalCountOfPages(); i++){
-                list.addAll(openMensaAPI.getCanteens(i).get());
-            }
-            list.sort((canteen, t1) -> canteen.toString().compareToIgnoreCase(t1.toString()));
-            canteenAdapter.addAll(list);
+            openMensaAPI.getCanteens().thenApply((outerLR -> {
+                PageInfo pageInfo = PageInfo.extractFromResponse(outerLR);
+                list.addAll(outerLR.body());
+                for(int i = 2; i <= pageInfo.getTotalCountOfPages(); i++)
+                    try {
+                        list.addAll(openMensaAPI.getCanteens(i).get());
+                    } catch (   Exception e) {}
+                list.sort((canteen, t1) -> canteen.toString().compareToIgnoreCase(t1.toString()));
+                canteenAdapter.addAll(list);
+                return this;
+            }));
             Toast.makeText(this, "Finished init", Toast.LENGTH_LONG).show();
         } catch (Exception e){
             Toast.makeText(this, "init failed", Toast.LENGTH_LONG).show();
@@ -189,10 +195,16 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
         try{
             mealsListAdapter.clear();
-            if(!openMensaAPI.getMensaState(canteenId, dateFormat.format(currentDate.getTime())).get().isClosed())
-                mealsListAdapter.addAll(openMensaAPI.getMeals(canteenId, dateString).get());
-            else
-                mealsListAdapter.addAll(new ArrayList<Meal>());
+            openMensaAPI.getMensaState(canteenId, dateFormat.format(currentDate.getTime())).thenApply(state -> {
+                if(!state.isClosed())
+                    try{
+                    mealsListAdapter.addAll(openMensaAPI.getMeals(canteenId, dateString).get());
+                    }catch (Exception e) {}
+                else
+                    mealsListAdapter.addAll(new ArrayList<>());
+                Toast.makeText(this, "Meals have been updated", Toast.LENGTH_LONG).show();
+                return this;
+            });
         }catch (Exception e){}
     }
 }
